@@ -890,6 +890,23 @@ app.delete('/api/products/:id', adminAuthMiddleware, (req, res) => {
 });
 
 // Orders & Bookings
+app.get('/api/orders/by-email', (req, res) => {
+  const { email } = req.query;
+  if (!email || !String(email).trim()) {
+    return res.status(400).json({ error: 'Email address is required to look up past bookings.' });
+  }
+
+  const targetEmail = String(email).toLowerCase().trim();
+  const db = getDB();
+
+  // Retrieve all orders matching customer email, sorted newest first
+  const customerOrders = db.orders
+    .filter((o) => o.customerEmail && o.customerEmail.toLowerCase().trim() === targetEmail)
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+  res.json(customerOrders);
+});
+
 app.get('/api/orders/track', (req, res) => {
   const { reference, email } = req.query;
   if (!reference) {
