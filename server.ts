@@ -44,6 +44,7 @@ interface Order {
   paymentStatus: 'Pending Verification' | 'Verified' | 'Failed Verification' | 'Cancelled';
   orderStatus: 'Pending' | 'Confirmed' | 'Shipped' | 'Cancelled';
   shippingStatus?: 'Pending' | 'Dispatched' | 'Delivered';
+  collectionDate?: string;
   notes?: string;
   createdAt: string;
 }
@@ -1041,24 +1042,154 @@ Client Email: ${newOrder.customerEmail}
   res.status(201).json(newOrder);
 });
 
+// Helper to format default or custom collection date
+function formatCollectionDate(dateStr?: string): string {
+  if (dateStr && dateStr.trim()) {
+    try {
+      const d = new Date(dateStr);
+      if (!isNaN(d.getTime())) {
+        return d.toLocaleDateString('en-US', {
+          weekday: 'long',
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric'
+        });
+      }
+    } catch (e) {
+      // Ignore parse failure
+    }
+    return dateStr;
+  }
+  // Default: 2 business days (48 hours) from current date
+  const targetDate = new Date(Date.now() + 48 * 60 * 60 * 1000);
+  if (targetDate.getDay() === 0) { // If Sunday, move to Monday
+    targetDate.setDate(targetDate.getDate() + 1);
+  }
+  return targetDate.toLocaleDateString('en-US', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  });
+}
+
+// Automatically sends a formatted email summary to the customer once payment is verified
+async function sendPaymentVerifiedEmail(order: Order, customCollectionDate?: string) {
+  const collectionDateStr = formatCollectionDate(customCollectionDate || order.collectionDate);
+  const verificationTimeStr = new Date().toLocaleString('en-US', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+
+  const subject = `✅ Payment Verified & Reservation Confirmed [Ref: ${order.id}] - Mercy Farmstead`;
+
+  const clientEmailBody = `
+Dear ${order.customerName},
+
+GREAT NEWS! Your payment for reservation reference ${order.id} has been SUCCESSFULLY VERIFIED and CONFIRMED by Mercy Farmstead.
+
+==================================================
+RESERVATION & PAYMENT VERIFICATION SUMMARY
+==================================================
+• Order Reference ID : ${order.id}
+• Reserved Item      : ${order.productName}
+• Item Category      : ${order.category}
+• Quantity Reserved  : ${order.quantity}
+• Total Price Paid   : ₦${order.totalPrice.toLocaleString()}
+• Payment Channel    : ${order.paymentBank}
+• Payment Status     : VERIFIED ✅
+• Verified Date/Time : ${verificationTimeStr}
+
+==================================================
+EXPECTED COLLECTION & PICKUP DETAILS
+==================================================
+📅 EXPECTED COLLECTION DATE : ${collectionDateStr}
+⏰ PICKUP OPERATIONAL HOURS  : 8:00 AM – 5:00 PM (Monday – Saturday)
+📍 COLLECTION LOCATION       : Mercy Farmstead Operations HQ,
+                               No25, TEMIDIRE AJAGBA WAKAJAYE, 
+                               IBADAN, BESIDE BOLUWATIFE MATERNITY, 
+                               OYO STATE, NIGERIA.
+
+COLLECTION INSTRUCTIONS:
+1. Upon arrival at our farmstead gate, present your Reservation Reference ID (${order.id}) or show this verified email receipt.
+2. Bring a valid form of identification or present your registered telephone line (${order.customerPhone}).
+3. For live livestock (Swine, Poultry, Fish), our farm dispatch team will assist with loading and ventilated transport preparation.
+
+Need custom delivery arrangements or assistance?
+- Phone / WhatsApp : +234 706 156 2420
+- Email Support    : mercyfarms01@gmail.com
+
+Thank you for choosing Mercy Farmstead!
+"Raising quality, delivering freshness."
+  `;
+
+  // Send email to customer
+  await sendMockEmail(order.customerEmail, subject, clientEmailBody);
+
+  // Send admin copy alert
+  const adminSubject = `[ADMIN ALERT] Payment Verified & Collection Scheduled - ${order.id}`;
+  const adminBody = `
+Administrative Alert: Payment Verified for Order ${order.id}
+Customer: ${order.customerName} (${order.customerEmail} / ${order.customerPhone})
+Item: ${order.productName} (Qty: ${order.quantity})
+Total Paid: ₦${order.totalPrice.toLocaleString()} via ${order.paymentBank}
+Scheduled Collection Date: ${collectionDateStr}
+Status: VERIFIED & CONFIRMED
+  `;
+  await sendMockEmail('mercyfarms01@gmail.com', adminSubject, adminBody);
+
+  // Trigger in-app customer notification
+  createNotification(
+    'Payment Verified & Collection Scheduled! ✅',
+    `Your payment of ₦${order.totalPrice.toLocaleString()} for order ${order.id} (${order.productName}) has been verified. Expected Collection Date: ${collectionDateStr}.`,
+    'payment_verified',
+    order.customerEmail,
+    order.id
+  );
+}
+
 // Update verification and status - Enforce admin privileges
-app.put('/api/orders/:id', adminAuthMiddleware, (req, res) => {
+app.put('/api/orders/:id', adminAuthMiddleware, async (req, res) => {
   const { id } = req.params;
-  const { paymentStatus, orderStatus, shippingStatus } = req.body;
+  const { paymentStatus, orderStatus, shippingStatus, collectionDate, resendVerificationEmail } = req.body;
   const db = getDB();
   const orderIdx = db.orders.findIndex((o) => o.id === id);
   if (orderIdx === -1) return res.status(404).json({ error: 'Order not found' });
 
   const oldOrder = db.orders[orderIdx];
+  const finalCollectionDate = collectionDate !== undefined 
+    ? sanitizeString(collectionDate) 
+    : (oldOrder.collectionDate || formatCollectionDate());
+
   db.orders[orderIdx] = {
     ...oldOrder,
     paymentStatus: paymentStatus !== undefined ? paymentStatus : oldOrder.paymentStatus,
     orderStatus: orderStatus !== undefined ? orderStatus : oldOrder.orderStatus,
-    shippingStatus: shippingStatus !== undefined ? shippingStatus : (oldOrder.shippingStatus || 'Pending')
+    shippingStatus: shippingStatus !== undefined ? shippingStatus : (oldOrder.shippingStatus || 'Pending'),
+    collectionDate: finalCollectionDate
   };
   saveDB(db);
 
-  // Trigger notifications for status updates
+  const updatedOrder = db.orders[orderIdx];
+
+  // Trigger formatted email summary if payment becomes Verified or explicitly requested
+  if ((paymentStatus === 'Verified' && oldOrder.paymentStatus !== 'Verified') || resendVerificationEmail) {
+    await sendPaymentVerifiedEmail(updatedOrder, finalCollectionDate);
+  } else if (paymentStatus === 'Failed Verification' && oldOrder.paymentStatus !== 'Failed Verification') {
+    createNotification(
+      'Payment Issue Found ⚠️',
+      `Your payment proof for ${id} was marked as Failed Verification. Please contact dispatch support on WhatsApp to rectify.`,
+      'payment_failed',
+      oldOrder.customerEmail,
+      id
+    );
+  }
+
+  // Trigger notifications for shipping status updates
   if (shippingStatus && shippingStatus !== oldOrder.shippingStatus) {
     createNotification(
       `Shipment Update: ${shippingStatus} 🚚`,
@@ -1068,27 +1199,8 @@ app.put('/api/orders/:id', adminAuthMiddleware, (req, res) => {
       id
     );
   }
-  if (paymentStatus && paymentStatus !== oldOrder.paymentStatus) {
-    if (paymentStatus === 'Verified') {
-      createNotification(
-        'Payment Verified! ✅',
-        `Great news! Your payment for order ${id} has been fully verified. We are preparing your order.`,
-        'payment_verified',
-        oldOrder.customerEmail,
-        id
-      );
-    } else if (paymentStatus === 'Failed Verification') {
-      createNotification(
-        'Payment Issue Found ⚠️',
-        `Your payment proof for ${id} was marked as Failed Verification. Please contact dispatch support on WhatsApp to rectify.`,
-        'payment_failed',
-        oldOrder.customerEmail,
-        id
-      );
-    }
-  }
 
-  if (orderStatus && orderStatus !== oldOrder.orderStatus) {
+  if (orderStatus && orderStatus !== oldOrder.orderStatus && orderStatus !== 'Confirmed') {
     createNotification(
       `Order ${orderStatus} 📦`,
       `Your livestock booking reference ${id} is now updated to: "${orderStatus}".`,
@@ -1096,16 +1208,14 @@ app.put('/api/orders/:id', adminAuthMiddleware, (req, res) => {
       oldOrder.customerEmail,
       id
     );
-  }
 
-  // Trigger dispatch log if changed
-  if (orderStatus && orderStatus !== oldOrder.orderStatus) {
     const notifySubject = `Your Order Status Updated: ${id}`;
     const notifyBody = `
 Dear ${oldOrder.customerName},
 
 This is to notify you that your livestock booking at Mercy Farmstead [Reference: ${id}] status has updated to: ${orderStatus}.
-Payment Status: ${db.orders[orderIdx].paymentStatus}
+Payment Status: ${updatedOrder.paymentStatus}
+Expected Collection Date: ${updatedOrder.collectionDate || formatCollectionDate()}
 
 If you have questions regarding your dispatch details or live pickup, please chat with us on WhatsApp 07061562420.
 
@@ -1115,7 +1225,38 @@ The Mercy Farmstead Team
     sendMockEmail(oldOrder.customerEmail, notifySubject, notifyBody);
   }
 
-  res.json(db.orders[orderIdx]);
+  res.json(updatedOrder);
+});
+
+// Explicit endpoint to verify payment and dispatch formatted email summary with expected collection date
+app.post('/api/orders/:id/verify-payment', adminAuthMiddleware, async (req, res) => {
+  const { id } = req.params;
+  const { collectionDate, notes } = req.body;
+  const db = getDB();
+  const orderIdx = db.orders.findIndex((o) => o.id === id);
+  if (orderIdx === -1) return res.status(404).json({ error: 'Order not found' });
+
+  const oldOrder = db.orders[orderIdx];
+  const finalCollectionDate = collectionDate ? sanitizeString(collectionDate) : formatCollectionDate(oldOrder.collectionDate);
+
+  db.orders[orderIdx] = {
+    ...oldOrder,
+    paymentStatus: 'Verified',
+    orderStatus: 'Confirmed',
+    shippingStatus: oldOrder.shippingStatus || 'Pending',
+    collectionDate: finalCollectionDate,
+    notes: notes ? sanitizeString(notes) : oldOrder.notes
+  };
+  saveDB(db);
+
+  const updatedOrder = db.orders[orderIdx];
+  await sendPaymentVerifiedEmail(updatedOrder, finalCollectionDate);
+
+  res.json({
+    success: true,
+    message: `Payment verified and formatted email summary dispatched to ${updatedOrder.customerEmail}`,
+    order: updatedOrder
+  });
 });
 
 // Contact Messages endpoint - Admin authorization enforced

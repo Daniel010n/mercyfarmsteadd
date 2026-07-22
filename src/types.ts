@@ -27,6 +27,7 @@ export interface Order {
   paymentStatus: 'Pending Verification' | 'Verified' | 'Failed Verification' | 'Cancelled';
   orderStatus: 'Pending' | 'Confirmed' | 'Shipped' | 'Cancelled';
   shippingStatus?: 'Pending' | 'Dispatched' | 'Delivered';
+  collectionDate?: string;
   notes?: string;
   createdAt: string;
 }

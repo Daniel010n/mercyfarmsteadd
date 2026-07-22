@@ -127,6 +127,9 @@ export default function AdminDashboard({
   const [verifyActionPayState, setVerifyActionPayState] = useState<string>('');
   const [verifyActionOrderState, setVerifyActionOrderState] = useState<string>('');
   const [verifyActionShippingState, setVerifyActionShippingState] = useState<string>('Pending');
+  const [verifyActionCollectionDate, setVerifyActionCollectionDate] = useState<string>('');
+  const [resendEmailSuccessMsg, setResendEmailSuccessMsg] = useState<string | null>(null);
+  const [isResendingEmail, setIsResendingEmail] = useState<boolean>(false);
   const [adminChallengePin, setAdminChallengePin] = useState<string>('');
   const [challengeError, setChallengeError] = useState<string | null>(null);
   const [challengeIsLoading, setChallengeIsLoading] = useState<boolean>(false);
@@ -387,8 +390,42 @@ export default function AdminDashboard({
     setVerifyActionPayState(payState);
     setVerifyActionOrderState(orderState);
     setVerifyActionShippingState(order.shippingStatus || 'Pending');
+    setVerifyActionCollectionDate(order.collectionDate || '');
+    setResendEmailSuccessMsg(null);
     setAdminChallengePin('');
     setChallengeError(null);
+  };
+
+  const handleResendVerifiedEmail = async () => {
+    if (!selectedVerifyOrder) return;
+    setIsResendingEmail(true);
+    setResendEmailSuccessMsg(null);
+    try {
+      const updateRes = await fetch(`/api/orders/${selectedVerifyOrder.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          paymentStatus: 'Verified',
+          orderStatus: 'Confirmed',
+          collectionDate: verifyActionCollectionDate,
+          resendVerificationEmail: true
+        })
+      });
+      if (updateRes.ok) {
+        const updated = await updateRes.json();
+        setOrders(prev => prev.map(o => o.id === selectedVerifyOrder.id ? updated : o));
+        setSelectedVerifyOrder(updated);
+        setResendEmailSuccessMsg(`✅ Formatted verification email summary successfully sent to ${updated.customerEmail}`);
+      } else {
+        setResendEmailSuccessMsg('⚠️ Unable to dispatch email summary. Please check connection.');
+      }
+    } catch (err) {
+      console.error(err);
+      setResendEmailSuccessMsg('⚠️ Connection error occurred while dispatching email.');
+    } finally {
+      setIsResendingEmail(false);
+      setTimeout(() => setResendEmailSuccessMsg(null), 7000);
+    }
   };
 
   const handleSecureVerifySubmit = async (e: React.FormEvent) => {
@@ -418,7 +455,8 @@ export default function AdminDashboard({
         body: JSON.stringify({ 
           paymentStatus: verifyActionPayState, 
           orderStatus: verifyActionOrderState,
-          shippingStatus: verifyActionShippingState
+          shippingStatus: verifyActionShippingState,
+          collectionDate: verifyActionCollectionDate
         })
       });
 
@@ -1589,6 +1627,8 @@ export default function AdminDashboard({
                             setVerifyActionPayState(o.paymentStatus || 'Pending Verification');
                             setVerifyActionOrderState(o.orderStatus || 'Pending');
                             setVerifyActionShippingState(o.shippingStatus || 'Pending');
+                            setVerifyActionCollectionDate(o.collectionDate || '');
+                            setResendEmailSuccessMsg(null);
                             setAdminChallengePin('');
                             setChallengeError(null);
                           }}
@@ -1787,6 +1827,51 @@ export default function AdminDashboard({
                               );
                             })}
                           </div>
+                        </div>
+
+                        {/* Expected Collection Date & Auto-Email Dispatch */}
+                        <div className="bg-slate-950 p-4 rounded-xl border border-slate-850 space-y-3">
+                          <div className="flex justify-between items-center">
+                            <span className="text-[9px] font-bold uppercase text-slate-400">Expected Collection / Pickup Date</span>
+                            <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-emerald-950 border border-emerald-800 text-emerald-400 flex items-center gap-1">
+                              <Mail size={10} /> Email Auto-Summary
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
+                            <div>
+                              <label className="text-[9px] uppercase font-black tracking-wider text-slate-500 block mb-1">
+                                Scheduled Pickup Date
+                              </label>
+                              <input
+                                type="text"
+                                value={verifyActionCollectionDate}
+                                onChange={(e) => setVerifyActionCollectionDate(e.target.value)}
+                                placeholder="e.g. Friday, July 25, 2026 or 2026-07-25"
+                                className="w-full text-xs font-semibold p-2.5 bg-slate-900 border border-slate-700 focus:ring-2 focus:ring-emerald-500 rounded-lg text-white placeholder-slate-500 outline-none"
+                              />
+                            </div>
+
+                            <div className="flex flex-col justify-end">
+                              <span className="text-[9px] text-slate-400 mb-1">Direct Outbound Dispatch:</span>
+                              <button
+                                type="button"
+                                onClick={handleResendVerifiedEmail}
+                                disabled={isResendingEmail}
+                                className="py-2.5 px-3 bg-emerald-700 hover:bg-emerald-600 disabled:bg-slate-800 text-white rounded-lg text-[10px] font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer transition-colors shadow-xs"
+                              >
+                                {isResendingEmail ? <RotateCw size={12} className="animate-spin" /> : <Mail size={12} />}
+                                <span>Send Email Summary Now</span>
+                              </button>
+                            </div>
+                          </div>
+
+                          {resendEmailSuccessMsg && (
+                            <div className="p-2.5 bg-emerald-950/80 border border-emerald-500/40 rounded-lg text-[10px] font-bold text-emerald-300 animate-fade-in flex items-center gap-1.5">
+                              <CheckCircle2 size={12} className="text-emerald-400 shrink-0" />
+                              <span>{resendEmailSuccessMsg}</span>
+                            </div>
+                          )}
                         </div>
 
                         {/* Audit Verification PIN input inside form */}

@@ -102,7 +102,7 @@ export default function TrackOrder({ onOpenChatWithAdmin }: TrackOrderProps) {
     y += 5.5;
     doc.text(`Bank Wire:   ${trackedOrder.paymentBank}`, 115, y);
     y += 5.5;
-    doc.text(`Verification: Manual Audit Routing`, 115, y);
+    doc.text(`Collection:  ${trackedOrder.collectionDate || 'Scheduled on Verification'}`, 115, y);
     y += 5.5;
     doc.text('Outpost:     Ibadan Swine & Poultry Breeding', 115, y);
 
@@ -663,6 +663,13 @@ export default function TrackOrder({ onOpenChatWithAdmin }: TrackOrderProps) {
                         : 'text-amber-600 dark:text-amber-400'
                     }`}>
                       {trackedOrder.paymentStatus}
+                    </span>
+                  </div>
+
+                  <div className="flex justify-between items-center pt-2 border-t border-neutral-100 dark:border-stone-850 text-neutral-600 dark:text-stone-400">
+                    <span className="font-bold flex items-center gap-1.5"><Calendar size={13} className="text-emerald-700" /> Expected Collection Date</span>
+                    <span className="font-extrabold text-emerald-800 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-1 rounded-lg text-xs">
+                      {trackedOrder.collectionDate || (trackedOrder.paymentStatus === 'Verified' ? 'Ready for Pickup' : 'Pending Verification')}
                     </span>
                   </div>
                   {trackedOrder.notes && (

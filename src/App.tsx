@@ -15,9 +15,88 @@ import Contact from './components/Contact';
 import Chatbot from './components/Chatbot';
 import TrackOrder from './components/TrackOrder';
 import companyLogo from './assets/images/mercy_farms_logo_1779313335439.png';
+import catfishImg from './assets/images/mercy_catfish_1779401143271.png';
+import pigsImg from './assets/images/mercy_pigs_pen_1779313656428.png';
+import broilersImg from './assets/images/mercy_broiler_chickens_1779313814744.png';
 
 // Schema Interfaces
 import { Product, Order, Announcement, AppNotification } from './types';
+
+// Default static produce directory fallback for static hostings (Vercel, Netlify, GitHub Pages)
+const FALLBACK_PRODUCTS: Product[] = [
+  {
+    id: 'prod-pigs',
+    name: 'Mercy Farm Premium Swine',
+    category: 'Pigs',
+    description: 'Locally crossed, highly healthy organic pigs raised on balanced grain rations. Lean meat, superior development.',
+    price: 180000,
+    unit: 'head',
+    stock: 24,
+    available: true,
+    imageUrl: pigsImg
+  },
+  {
+    id: 'prod-eggs',
+    name: 'Fresh Golden Farm Eggs',
+    category: 'Eggs',
+    description: 'Sanitized, freshly sorted organic eggs with golden-rich yolks. Direct from our laying bays daily.',
+    price: 4500,
+    unit: 'crate',
+    stock: 150,
+    available: true,
+    imageUrl: 'https://images.unsplash.com/photo-1506976785307-8732e854ad03?auto=format&fit=crop&q=80&w=600'
+  },
+  {
+    id: 'prod-layers',
+    name: 'Fully Vaccinated Point of Lay (Layers)',
+    category: 'Layers',
+    description: 'Productive brown hens prepared for egg production. Fully vaccinated, disease-free, high laying rate.',
+    price: 3800,
+    unit: 'head',
+    stock: 220,
+    available: true,
+    imageUrl: 'https://images.unsplash.com/photo-1548550023-2bdb3c5beed7?auto=format&fit=crop&q=80&w=600'
+  },
+  {
+    id: 'prod-fish',
+    name: 'Fresh Table-Size Catfish',
+    category: 'Fish',
+    description: 'Grown in continuous aeration ponds. High proteins, extremely sweet taste, caught fresh on pickup order.',
+    price: 2500,
+    unit: 'kg',
+    stock: 450,
+    available: true,
+    imageUrl: catfishImg
+  },
+  {
+    id: 'prod-broilers',
+    name: 'Grown Broiler Meat Birds',
+    category: 'Broilers',
+    description: 'Heavyweight meat-type chickens raised organically with natural feeds. Tender, large size, perfect for culinary usage.',
+    price: 4500,
+    unit: 'head',
+    stock: 180,
+    available: true,
+    imageUrl: broilersImg
+  }
+];
+
+const FALLBACK_ANNOUNCEMENTS: Announcement[] = [
+  {
+    id: 'ann-1',
+    title: 'Welcome to Mercy Farmstead Online',
+    content: 'We are proud to introduce our active digital catalogue and livestock reservation platform. Secure fresh, sustainably raised farm produce directly from Ibadan, Oyo State, Nigeria.',
+    type: 'news',
+    createdAt: new Date().toISOString()
+  },
+  {
+    id: 'ann-2',
+    title: 'New Bio-Secured Swine Stock Open',
+    content: 'A healthy lineage of premium pigs has reached ideal weight benchmarks and is now open for bookings. Excellent bone structure and pure feed training.',
+    type: 'arrival',
+    createdAt: new Date().toISOString()
+  }
+];
 
 interface CartItem {
   product: Product;
@@ -43,10 +122,21 @@ export default function App() {
   }, [isDarkMode]);
   
   // Datasets
-  const [products, setProducts] = useState<Product[]>([]);
-  const [isLoadingProducts, setIsLoadingProducts] = useState(true);
+  const [products, setProducts] = useState<Product[]>(() => {
+    const saved = localStorage.getItem('mercy_farmstead_products');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch {
+        // fallback to default
+      }
+    }
+    return FALLBACK_PRODUCTS;
+  });
+  const [isLoadingProducts, setIsLoadingProducts] = useState(false);
   
-  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [announcements, setAnnouncements] = useState<Announcement[]>(FALLBACK_ANNOUNCEMENTS);
   
   // Notification states
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
@@ -199,14 +289,19 @@ export default function App() {
   };
 
   const fetchProductsListing = async (silent = false) => {
-    if (!silent) setIsLoadingProducts(true);
+    if (!silent && products.length === 0) setIsLoadingProducts(true);
     try {
       const res = await fetch('/api/products');
       if (res.ok) {
-        setProducts(await res.json());
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          setProducts(data);
+          localStorage.setItem('mercy_farmstead_products', JSON.stringify(data));
+          return;
+        }
       }
     } catch (error) {
-      console.error('Network boundary blocked product sync:', error);
+      console.warn('Network API boundary offline or unroutable, maintaining static produce directory:', error);
     } finally {
       if (!silent) setIsLoadingProducts(false);
     }
@@ -216,10 +311,13 @@ export default function App() {
     try {
       const res = await fetch('/api/announcements');
       if (res.ok) {
-        setAnnouncements(await res.json());
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          setAnnouncements(data);
+        }
       }
     } catch (e) {
-      console.warn('Announcement sync aborted');
+      console.warn('Announcement sync offline, using local fallback');
     }
   };
 
