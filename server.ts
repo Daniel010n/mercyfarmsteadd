@@ -664,7 +664,7 @@ app.post('/api/admin/login', rateLimiter(8, 10 * 60 * 1000), (req, res) => {
   const db = getDB();
   
   const normalizedEmail = (email || '').trim().toLowerCase();
-  const allowedAdminEmails = ['akangbedanieltomiwa@gmail.com', 'mercyfarms01@gmail.com'];
+  const allowedAdminEmails = ['mercyfarms01@gmail.com'];
   if (process.env.ADMIN_EMAIL_RECEIVER) {
     allowedAdminEmails.push(process.env.ADMIN_EMAIL_RECEIVER.trim().toLowerCase());
   }
@@ -672,7 +672,7 @@ app.post('/api/admin/login', rateLimiter(8, 10 * 60 * 1000), (req, res) => {
   if (!normalizedEmail || !allowedAdminEmails.includes(normalizedEmail)) {
     return res.status(403).json({ 
       success: false, 
-      error: 'Access Denied. Only authorized owner email is permitted to log in.' 
+      error: 'Access Denied. Only mercyfarms01@gmail.com is permitted to log in.' 
     });
   }
 
@@ -1910,8 +1910,32 @@ const startServer = async () => {
   // Serve public assets (sitemap.xml, robots.txt, etc)
   app.use(express.static(path.join(process.cwd(), 'public')));
 
-  // Route standalone admin portal views
-  app.get('/admin*', (req, res, next) => {
+  // Explicitly block standard /admin paths to prevent hacker discovery and automated scanning
+  app.get(['/admin', '/admin/*', '/admin.html', '/admin-portal', '/admin-login'], (req, res) => {
+    return res.status(404).send(`
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="UTF-8" />
+        <title>404 Not Found</title>
+        <style>
+          body { font-family: system-ui, sans-serif; background: #0f172a; color: #94a3b8; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; text-align: center; }
+          h1 { color: #f8fafc; font-size: 2rem; margin-bottom: 0.5rem; }
+          p { font-size: 1rem; }
+        </style>
+      </head>
+      <body>
+        <div>
+          <h1>404 - Page Not Found</h1>
+          <p>The requested URL was not found on this server.</p>
+        </div>
+      </body>
+      </html>
+    `);
+  });
+
+  // Route standalone admin portal views exclusively via secret obfuscated owner URLs
+  app.get(['/mercy-vault-portal*', '/mercy-hq-control*', '/secure-owner-access*'], (req, res, next) => {
     if (req.path.startsWith('/api')) {
        return next();
     }
