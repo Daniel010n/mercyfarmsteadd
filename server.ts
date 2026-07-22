@@ -663,10 +663,16 @@ app.post('/api/admin/login', rateLimiter(8, 10 * 60 * 1000), (req, res) => {
   const { passcode, email } = req.body;
   const db = getDB();
   
-  if (!email || email.trim().toLowerCase() !== 'mercyfarms01@gmail.com') {
+  const normalizedEmail = (email || '').trim().toLowerCase();
+  const allowedAdminEmails = ['akangbedanieltomiwa@gmail.com', 'mercyfarms01@gmail.com'];
+  if (process.env.ADMIN_EMAIL_RECEIVER) {
+    allowedAdminEmails.push(process.env.ADMIN_EMAIL_RECEIVER.trim().toLowerCase());
+  }
+
+  if (!normalizedEmail || !allowedAdminEmails.includes(normalizedEmail)) {
     return res.status(403).json({ 
       success: false, 
-      error: 'Access Denied. Only the authorized owner signature email is permitted to log in.' 
+      error: 'Access Denied. Only authorized owner email is permitted to log in.' 
     });
   }
 

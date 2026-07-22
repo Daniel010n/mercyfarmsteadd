@@ -918,9 +918,9 @@ export default function AdminDashboard({
               <Lock size={28} />
             </div>
             
-            <h2 className="text-xl font-black tracking-tight uppercase">Admin Core Security</h2>
+            <h2 className="text-xl font-black tracking-tight uppercase">Admin Security Portal</h2>
             <p className="text-xs text-slate-400 mt-1">
-              Mercy Farmstead private operational backdoor portal. Authorization pin required.
+              Mercy Farmstead administrative control room.
             </p>
           </div>
 
@@ -932,25 +932,25 @@ export default function AdminDashboard({
                 type="email"
                 required
                 autoComplete="off"
-                placeholder="Enter authorized administrator email"
+                placeholder="akangbedanieltomiwa@gmail.com"
                 value={adminEmail}
                 onChange={(e) => setAdminEmail(e.target.value)}
-                className="w-full text-base font-extrabold p-3 bg-slate-900 border border-slate-600 focus:ring-2 focus:ring-emerald-500 rounded-xl text-white placeholder-slate-500 block font-sans outline-none"
+                className="w-full text-sm font-extrabold p-3 bg-slate-900 border border-slate-600 focus:ring-2 focus:ring-emerald-500 rounded-xl text-white placeholder-slate-500 block font-sans outline-none"
               />
             </div>
 
             <div>
-              <label className="block text-[9px] font-black uppercase tracking-wider text-slate-400 mb-1">Backdoor Passcode Key</label>
+              <label className="block text-[9px] font-black uppercase tracking-wider text-slate-400 mb-1">Passcode Key</label>
               <div className="relative">
                 <input
                   id="admin-passcode-input"
                   type={showPasscode ? 'text' : 'password'}
                   required
                   autoComplete="new-password"
-                  placeholder="••••••••"
+                  placeholder="mercyadmin"
                   value={passcode}
                   onChange={(e) => setPasscode(e.target.value)}
-                  className="w-full text-base font-black p-3 bg-slate-900 border border-slate-600 focus:ring-2 focus:ring-emerald-500 rounded-xl text-white placeholder-slate-550 block pr-12 font-mono outline-none"
+                  className="w-full text-sm font-black p-3 bg-slate-900 border border-slate-600 focus:ring-2 focus:ring-emerald-500 rounded-xl text-white placeholder-slate-500 block pr-12 font-mono outline-none"
                 />
                 <button
                   type="button"
