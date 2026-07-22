@@ -1901,6 +1901,9 @@ app.post('/api/admin/emails/clear', adminAuthMiddleware, (req, res) => {
 
 // Core dev and prod routing setup
 const startServer = async () => {
+  // Serve public assets (sitemap.xml, robots.txt, etc)
+  app.use(express.static(path.join(process.cwd(), 'public')));
+
   // Route standalone admin portal views
   app.get('/admin*', (req, res, next) => {
     if (req.path.startsWith('/api')) {
